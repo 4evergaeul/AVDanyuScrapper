@@ -9,6 +9,8 @@ using System.Threading;
 using System.Collections.Generic;
 using System.Xml;
 using Microsoft.VisualBasic.FileIO;
+using System.Windows.Input;
+using System.Xml.Linq;
 
 namespace AvdanyuScraper
 {
@@ -84,7 +86,7 @@ namespace AvdanyuScraper
             if (fbd.ShowDialog() == DialogResult.OK)
             {
                 var directories = Directory.GetDirectories(fbd.SelectedPath);
-                foreach(var dir in directories)
+                foreach (var dir in directories)
                 {
                     // Find all recent nfos
                     var allNfos = Directory.GetFiles(dir, "*.nfo", System.IO.SearchOption.AllDirectories);
@@ -124,49 +126,40 @@ namespace AvdanyuScraper
 
         private static void RenameMovies(string rootDirectory)
         {
-            var allMovies = Directory.GetFiles(rootDirectory, "*.*", System.IO.SearchOption.AllDirectories)
-                        .Where(f => MovieExtensions.Any(f.ToLower().EndsWith)).ToList();
+            var allMovieNfos = Directory.GetFiles(rootDirectory, "*.nfo", System.IO.SearchOption.AllDirectories).ToList();
 
-            foreach(var movie in allMovies)
+            foreach (var nfo in allMovieNfos)
             {
-                var name = Path.GetFileNameWithoutExtension(movie);
                 try
                 {
-                    var currDir = Path.GetDirectoryName(movie);
-                    var nfo = Directory.GetFiles(currDir, $"{name}.nfo").FirstOrDefault();
-                    var title = "";
-                    if (!string.IsNullOrEmpty(nfo))
+                    var doc = new XmlDocument();
+                    doc.Load(nfo);
+                    var title = doc.GetElementsByTagName("title")[0]?.InnerText;
+
+                    var currDir = Path.GetDirectoryName(nfo);
+                    var movies = Directory.GetFiles(currDir, "*.*", System.IO.SearchOption.AllDirectories)
+                            .Where(f => MovieExtensions.Any(f.ToLower().EndsWith)).ToList();
+                    if (movies.Count == 1)
                     {
-                        var doc = new XmlDocument();
-                        doc.Load(nfo);
-                        title = doc.GetElementsByTagName("title")[0]?.InnerText;
-                        if (!string.IsNullOrEmpty(title))
-                        {
-                            //var fanart = Directory.GetFiles(currDir, $"{name}-fanart.jpg").FirstOrDefault();
-                            //var poster = Directory.GetFiles(currDir, $"{name}-poster.jpg").FirstOrDefault();
-                            //var thumb = Directory.GetFiles(currDir, $"{name}-thumb.jpg").FirstOrDefault();
-                            var ext = Path.GetExtension(movie);
-                            //FileSystem.RenameFile(fanart, $"{title}-fanart.jpg");
-                            //FileSystem.RenameFile(poster, $"{title}-poster.jpg");
-                            //FileSystem.RenameFile(thumb, $"{title}-thumb.jpg");
-                            FileSystem.RenameFile(nfo, $"{title}.nfo");
-                            FileSystem.RenameFile(movie, $"{title}{ext}");
-                        }
-                        else
-                        {
-                            Log.Warning($"{name} nfo title not found");
-                        }
+                        var movie = movies.FirstOrDefault();
+                        var ext = Path.GetExtension(movie);
+                        FileSystem.RenameFile(movie, $"{title}{ext}");
                     }
-                    else
+                    else if(movies.Count > 1)
                     {
-                        Log.Warning($"{name} nfo not found");
+                        for (int i = 0; i < movies.Count; i++)
+                        {
+                            var ext = Path.GetExtension(movies[i]);
+                            FileSystem.RenameFile(movies[i], $"{title}-CD{i+1}{ext}");
+                        }
                     }
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
-                    Log.Error($"Error when renaming {name} \n\r");
+                    Log.Error($"Error when renaming {Path.GetFileNameWithoutExtension(nfo)} \n\r");
                     Log.Error(ex.ToString());
                 }
+
             }
         }
 
